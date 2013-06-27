@@ -1,0 +1,40 @@
+IC3 reference implementation: a short, simple, fairly competitive
+implementation of IC3.  Read it, tune it, extend it, play with it.
+
+Copyright 2013, Aaron R. Bradley
+
+1. Obtain the latest version of Minisat at
+
+    https://github.com/niklasso/minisat
+
+  Unpack it into ic3ref/minisat (so that Solver.h is at
+  ic3ref/minisat/minisat/core/Solver.h).  Make.
+
+2. Obtain the AIGER utilities (aiger-1.9.4.tar.gz) at 
+
+    http://fmv.jku.at/aiger/
+
+  Unpack it into ic3/aiger (so that aiger.c is at
+  ic3ref/aiger/aiger.c).  DO NOT MAKE.
+
+3. At ic3ref, make.
+
+4. Run
+
+    ./IC3 [<option>|<property ID>]* < <AIGER file>
+
+  where
+
+    -v: enables verbose output
+
+    -s: enables output of runtime statistics
+
+    -r: randomizes execution to better indicate performance
+
+    -b: uses basic generalization
+
+    <property ID>: an integer specifying a property index in the AIGER
+        file, which defaults to 0.  If 'B' is non-0, prefers 'B' to
+        'O' (see AIGER 1.9 format).
+
+    <AIGER file>: AIGER formatted file with .aig or .aag extension
