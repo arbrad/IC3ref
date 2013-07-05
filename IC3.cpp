@@ -498,10 +498,10 @@ namespace IC3 {
              i != latches.end(); ++i)
           if (fr.consecution->conflict.has(~model.primeLit(*i)))
             core->push_back(*i);
-        fr.consecution->releaseVar(~act);
         if (!initiation(*core))
           *core = latches;
       }
+      fr.consecution->releaseVar(~act);
       return true;
     }
 
