@@ -30,8 +30,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "Solver.h"
 #include "Vec.h"
 
-#define ASSERTSUCC true
-
 // A reference implementation of IC3, i.e., one that is meant to be
 // read and used as a starting point for tuning, extending, and
 // experimenting.
@@ -138,9 +136,18 @@ namespace IC3 {
       maxJoins(1<<20), micAttempts(3), cexState(0), nQuery(0), nCTI(0), nCTG(0),
       nmic(0), satTime(0), nCoreReduced(0), nAbortJoin(0), nAbortMic(0)
     {
+      // construct lifting solver
       lifts = model.newSolver();
-      model.loadTransitionRelation(*lifts);
-      lifts->addClause(~model.primedError());
+      // don't assert primed invariant constraints
+      model.loadTransitionRelation(*lifts, false);
+      // assert notInvConstraints (in stateOf) when lifting
+      notInvConstraints = Minisat::mkLit(lifts->newVar());
+      Minisat::vec<Minisat::Lit> cls;
+      cls.push(~notInvConstraints);
+      for (LitVec::const_iterator i = model.invariantConstraints().begin();
+           i != model.invariantConstraints().end(); ++i)
+        cls.push(model.primeLit(~*i));
+      lifts->addClause_(cls);
     }
     ~IC3() {
       for (vector<Frame>::const_iterator i = frames.begin(); 
@@ -288,6 +295,7 @@ namespace IC3 {
     vector<Frame> frames;
 
     Minisat::Solver * lifts;
+    Minisat::Lit notInvConstraints;
 
     // Push a new Frame.
     void extend() {
@@ -361,26 +369,25 @@ namespace IC3 {
     // Assumes that last call to fr.consecution->solve() was
     // satisfiable.  Extracts state(s) cube from satisfying
     // assignment.
-    size_t stateOf(Frame & fr, size_t succ = 0, bool assertSucc = ASSERTSUCC) {
+    size_t stateOf(Frame & fr, size_t succ = 0) {
       // create state
       size_t st = newState();
       state(st).successor = succ;
       MSLitVec assumps;
-      assumps.capacity(assertSucc
-                       + 2 * (model.endInputs()-model.beginInputs())
+      assumps.capacity(1 + 2 * (model.endInputs()-model.beginInputs())
                        + (model.endLatches()-model.beginLatches()));
-      Minisat::Lit act;
-      if (assertSucc && succ != 0) {
-        assert (succ != 0);
-        act = Minisat::mkLit(lifts->newVar());  // activation literal
-        Minisat::vec<Minisat::Lit> cls;
-        cls.push(~act);
-        assumps.push(act);
+      Minisat::Lit act = Minisat::mkLit(lifts->newVar());  // activation literal
+      assumps.push(act);
+      Minisat::vec<Minisat::Lit> cls;
+      cls.push(~act);
+      cls.push(notInvConstraints);  // successor must satisfy inv. constraint
+      if (succ == 0)
+        cls.push(~model.primedError());
+      else
         for (LitVec::const_iterator i = state(succ).latches.begin(); 
              i != state(succ).latches.end(); ++i)
           cls.push(model.primeLit(~*i));
-        lifts->addClause_(cls);
-      }
+      lifts->addClause_(cls);
       // extract and assert primary inputs
       for (VarVec::const_iterator i = model.beginInputs(); 
            i != model.endInputs(); ++i) {
@@ -423,22 +430,8 @@ namespace IC3 {
       for (LitVec::const_iterator i = latches.begin(); i != latches.end(); ++i)
         if (lifts->conflict.has(~*i))
           state(st).latches.push_back(*i);  // record lifted latches
-      if (assertSucc) {
-        if (succ != 0)
-          // deactivate negation of successor
-          lifts->releaseVar(~act);
-      }
-      else {
-        // add as target for future lifting
-        Minisat::vec<Minisat::Lit> cls, pcls;
-        for (LitVec::const_iterator i = state(st).latches.begin(); 
-             i != state(st).latches.end(); ++i) {
-          cls.push(~*i);
-          pcls.push(model.primeLit(~*i));
-        }
-        lifts->addClause_(cls);
-        lifts->addClause_(pcls);
-      }
+      // deactivate negation of successor
+      lifts->releaseVar(~act);
       return st;
     }
 
@@ -453,7 +446,7 @@ namespace IC3 {
     // predecessor(s).
     bool consecution(size_t fi, const LitVec & latches, size_t succ = 0,
                      LitVec * core = NULL, size_t * pred = NULL, 
-                     bool orderedCore = false, bool assertSucc = ASSERTSUCC)
+                     bool orderedCore = false)
     {
       Frame & fr = frames[fi];
       MSLitVec assumps, cls;
@@ -480,7 +473,7 @@ namespace IC3 {
       endTimer(satTime);
       if (rv) {
         // fails: extract predecessor(s)
-        if (pred) *pred = stateOf(fr, succ, assertSucc);
+        if (pred) *pred = stateOf(fr, succ);
         fr.consecution->releaseVar(~act);
         return false;
       }
@@ -536,7 +529,7 @@ namespace IC3 {
         state(cubeState).latches = cube;
         size_t ctg;
         LitVec core;
-        if (consecution(level, cube, cubeState, &core, &ctg, true, true)) {
+        if (consecution(level, cube, cubeState, &core, &ctg, true)) {
           if (core.size() < cube.size()) {
             ++nCoreReduced;  // stats
             cube = core;
@@ -668,11 +661,6 @@ namespace IC3 {
       while (!obls.empty()) {
         PriorityQueue::iterator obli = obls.begin();
         Obligation obl = *obli;
-        // Is it the beginning of a counterexample trace?
-        if (obl.level == 0 && !initiation(state(obl.state).latches)) {
-          cexState = obl.state;
-          return false;
-        }
         LitVec core;
         size_t predi;
         // Is the obligation fulfilled?

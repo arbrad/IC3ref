@@ -186,6 +186,9 @@ public:
   Minisat::Lit error() const { return _error; }
   Minisat::Lit primedError() const { return _primedError; }
 
+  // Invariant constraints
+  const LitVec & invariantConstraints() { return constraints; }
+
   // Creates a Solver and initializes its variables to maintain
   // alignment with the Model's variables.
   Minisat::Solver * newSolver() const;
@@ -193,8 +196,11 @@ public:
   // Loads the TR into the solver.  Also loads the primed error
   // definition such that Model::primedError() need only be asserted
   // to activate it.  Invariant constraints (AIGER 1.9) and the
-  // negation of the error are always added.
-  void loadTransitionRelation(Minisat::Solver & slv);
+  // negation of the error are always added --- except that the primed
+  // form of the invariant constraints are not asserted if
+  // !primeConstraints.
+  void loadTransitionRelation(Minisat::Solver & slv, 
+                              bool primeConstraints = true);
   // Loads the initial condition into the solver.
   void loadInitialCondition(Minisat::Solver & slv) const;
   // Loads the error into the solver, which is only necessary for the

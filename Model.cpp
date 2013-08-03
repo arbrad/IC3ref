@@ -74,7 +74,7 @@ Minisat::Solver * Model::newSolver() const {
   return slv;
 }
 
-void Model::loadTransitionRelation(Minisat::Solver & slv) {
+void Model::loadTransitionRelation(Minisat::Solver & slv, bool primeConstraints) {
   if (!sslv) {
     // create a simplified CNF version of (this slice of) the TR
     sslv = new Minisat::SimpSolver();
@@ -145,7 +145,6 @@ void Model::loadTransitionRelation(Minisat::Solver & slv) {
     for (LitVec::const_iterator i = constraints.begin(); 
          i != constraints.end(); ++i) {
       sslv->addClause(*i);
-      sslv->addClause(primeLit(*i));
     }
     // assert l' = f for each latch l
     for (VarVec::const_iterator i = beginLatches(); i != endLatches(); ++i) {
@@ -168,6 +167,10 @@ void Model::loadTransitionRelation(Minisat::Solver & slv) {
   for (Minisat::TrailIterator c = sslv->trailBegin(); 
        c != sslv->trailEnd(); ++c)
     slv.addClause(*c);
+  if (primeConstraints)
+    for (LitVec::const_iterator i = constraints.begin(); 
+         i != constraints.end(); ++i)
+      slv.addClause(primeLit(*i));
 }
 
 void Model::loadInitialCondition(Minisat::Solver & slv) const {
