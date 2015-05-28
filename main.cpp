@@ -65,6 +65,7 @@ int main(int argc, char ** argv) {
   }
   // create the Model from the obtained aig
   Model * model = modelFromAiger(aig, propertyIndex);
+  aiger_reset(aig);
   if (!model) return 0;
 
   // model check it

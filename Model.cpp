@@ -31,6 +31,7 @@ Minisat::Var Var::gvi = 0;
 
 Model::~Model() {
   if (inits) delete inits;
+  if (sslv) delete sslv;
 }
 
 const Var & Model::primeVar(const Var & v, Minisat::SimpSolver * slv) {
