@@ -131,11 +131,14 @@ namespace IC3 {
   class IC3 {
   public:
     IC3(Model & _model) :
-      verbose(0), random(false), model(_model), k(1), nextState(0), 
-      litOrder(_model), numLits(0), numUpdates(0), maxDepth(1), maxCTGs(3),
+      verbose(0), random(false), model(_model), k(1), nextState(0),
+      litOrder(), slimLitOrder(),
+      numLits(0), numUpdates(0), maxDepth(1), maxCTGs(3),
       maxJoins(1<<20), micAttempts(3), cexState(0), nQuery(0), nCTI(0), nCTG(0),
       nmic(0), satTime(0), nCoreReduced(0), nAbortJoin(0), nAbortMic(0)
     {
+      slimLitOrder.heuristicLitOrder = &litOrder;
+
       // construct lifting solver
       lifts = model.newSolver();
       // don't assert primed invariant constraints
@@ -319,8 +322,7 @@ namespace IC3 {
     // ordering prefers to keep literals that appear frequently in
     // addCube() calls.
     struct HeuristicLitOrder {
-      HeuristicLitOrder(Model & m) : model(m), _mini(1<<20) {}
-      Model & model;
+      HeuristicLitOrder() : _mini(1<<20) {}
       vector<float> counts;
       size_t _mini;
       void count(const LitVec & cube) {
@@ -336,15 +338,23 @@ namespace IC3 {
         for (size_t i = _mini; i < counts.size(); ++i)
           counts[i] *= 0.99;
       }
+    } litOrder;
+
+    struct SlimLitOrder {
+      HeuristicLitOrder *heuristicLitOrder;
+
+      SlimLitOrder() {}
+
       bool operator()(const Minisat::Lit & l1, const Minisat::Lit & l2) const {
         // l1, l2 must be unprimed
         size_t i2 = (size_t) Minisat::toInt(Minisat::var(l2));
-        if (i2 >= counts.size()) return false;
+        if (i2 >= heuristicLitOrder->counts.size()) return false;
         size_t i1 = (size_t) Minisat::toInt(Minisat::var(l1));
-        if (i1 >= counts.size()) return true;
-        return (counts[i1] < counts[i2]);
+        if (i1 >= heuristicLitOrder->counts.size()) return true;
+        return (heuristicLitOrder->counts[i1] < heuristicLitOrder->counts[i2]);
       }
-    } litOrder;
+    } slimLitOrder;
+
     float numLits, numUpdates;
     void updateLitOrder(const LitVec & cube, size_t level) {
       litOrder.decay();
@@ -355,14 +365,14 @@ namespace IC3 {
 
     // order according to preference
     void orderCube(LitVec & cube) {
-      stable_sort(cube.begin(), cube.end(), litOrder);
+      stable_sort(cube.begin(), cube.end(), slimLitOrder);
     }
 
     typedef Minisat::vec<Minisat::Lit> MSLitVec;
 
     // Orders assumptions for Minisat.
     void orderAssumps(MSLitVec & cube, bool rev, int start = 0) {
-      stable_sort(cube + start, cube + cube.size(), litOrder);
+      stable_sort(cube + start, cube + cube.size(), slimLitOrder);
       if (rev) reverse(cube + start, cube + cube.size());
     }
 
